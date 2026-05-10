@@ -13,7 +13,7 @@ const port = process.env.PORT || 3000;
 app.use(express.static("public"));
 app.use(express.json());
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: '/tmp/' });
 
 const COLLECTION_NAME = "notebook_lm_rag_collection";
 const getVectorStoreConfig = () => ({
@@ -106,6 +106,10 @@ ${searchedChunks.map(c => c.pageContent).join('\n\n')}
     }
 });
 
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    app.listen(port, () => {
+        console.log(`Server running at http://localhost:${port}`);
+    });
+}
+
+export default app;
