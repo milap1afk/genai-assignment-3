@@ -4,16 +4,39 @@ import multer from "multer";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function cosineSimilarity(vecA, vecB) {
+  let dotProduct = 0, normA = 0, normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
 const upload = multer({ dest: '/tmp/' });
+
+app.get("/", (req, res) => {
+    try {
+        const html = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf-8");
+        res.send(html);
+    } catch (e) {
+        res.status(500).send("Error loading frontend: " + e.message);
+    }
+});
 
 // Endpoint to upload and parse document
 app.post("/api/upload", upload.single("document"), async (req, res) => {
@@ -59,9 +82,17 @@ app.post("/api/ask", async (req, res) => {
             model: "text-embedding-004",
         });
 
-        const vectorStore = await MemoryVectorStore.fromDocuments(chunkedDocs, embeddings);
-        const retriever = vectorStore.asRetriever({ k: 4 });
-        const searchedChunks = await retriever.invoke(query);
+        const chunkTexts = chunkedDocs.map(c => c.pageContent);
+        const chunkEmbeddings = await embeddings.embedDocuments(chunkTexts);
+        const queryEmbedding = await embeddings.embedQuery(query);
+
+        const scoredChunks = chunkedDocs.map((chunk, i) => ({
+            chunk,
+            score: cosineSimilarity(queryEmbedding, chunkEmbeddings[i])
+        }));
+
+        scoredChunks.sort((a, b) => b.score - a.score);
+        const searchedChunks = scoredChunks.slice(0, 4).map(c => c.chunk);
 
         if (searchedChunks.length === 0) {
             return res.json({ answer: "No relevant context found in the indexed documents." });
