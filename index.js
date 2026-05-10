@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { TextLoader } from "langchain/document_loaders/fs/text";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { program } from "commander";
@@ -16,7 +16,8 @@ const COLLECTION_NAME = "notebook_lm_rag_collection";
 
 const getVectorStoreConfig = () => ({
   url: process.env.QDRANT_URL || "http://localhost:6333",
-  collectionName: COLLECTION_NAME
+  collectionName: COLLECTION_NAME,
+  ...(process.env.QDRANT_API_KEY && { apiKey: process.env.QDRANT_API_KEY })
 });
 
 program

@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import fs from "fs";
@@ -18,7 +18,8 @@ const upload = multer({ dest: 'uploads/' });
 const COLLECTION_NAME = "notebook_lm_rag_collection";
 const getVectorStoreConfig = () => ({
   url: process.env.QDRANT_URL || "http://localhost:6333",
-  collectionName: COLLECTION_NAME
+  collectionName: COLLECTION_NAME,
+  ...(process.env.QDRANT_API_KEY && { apiKey: process.env.QDRANT_API_KEY })
 });
 
 // Endpoint to upload and index document
