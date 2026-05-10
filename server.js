@@ -3,9 +3,8 @@ import express from "express";
 import multer from "multer";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
-import { OpenAI } from "openai";
 import fs from "fs";
 
 const app = express();
@@ -39,8 +38,8 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
         });
 
         const chunkedDocs = await textSplitter.splitDocuments(docs);
-        const embeddings = new OpenAIEmbeddings({
-            model: "text-embedding-3-large",
+        const embeddings = new GoogleGenAIEmbeddings({
+            model: "text-embedding-004",
         });
 
         await QdrantVectorStore.fromDocuments(chunkedDocs, embeddings, getVectorStoreConfig());
@@ -63,8 +62,8 @@ app.post("/api/ask", async (req, res) => {
             return res.status(400).json({ error: "Query is required" });
         }
 
-        const embeddings = new OpenAIEmbeddings({
-            model: "text-embedding-3-large",
+        const embeddings = new GoogleGenAIEmbeddings({
+            model: "text-embedding-004",
         });
 
         const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, getVectorStoreConfig());
@@ -75,7 +74,11 @@ app.post("/api/ask", async (req, res) => {
             return res.json({ answer: "No relevant context found in the indexed documents." });
         }
 
-        const client = new OpenAI();
+        const model = new ChatGoogleGenAI({
+            modelName: "gemini-1.5-flash",
+            temperature: 0.1
+        });
+        
         const systemPrompt = `You are an AI Assistant that helps resolve user queries based strictly on the provided context from indexed documents.
 
 Rule:
@@ -87,17 +90,13 @@ Context:
 ${searchedChunks.map(c => c.pageContent).join('\n\n')}
 `;
 
-        const response = await client.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: query }
-            ],
-            temperature: 0.1
-        });
+        const response = await model.invoke([
+            ["system", systemPrompt],
+            ["human", query]
+        ]);
 
         res.json({ 
-            answer: response.choices[0].message.content,
+            answer: response.content,
             sources: searchedChunks.map(c => c.metadata.source || "Unknown")
         });
     } catch (error) {

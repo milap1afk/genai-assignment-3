@@ -2,9 +2,8 @@ import "dotenv/config";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
-import { OpenAI } from "openai";
 import { program } from "commander";
 import path from "path";
 
@@ -52,8 +51,8 @@ program
       const chunkedDocs = await textSplitter.splitDocuments(docs);
       console.log(`Created ${chunkedDocs.length} chunks from the document.`);
 
-      const embeddings = new OpenAIEmbeddings({
-        model: "text-embedding-3-large",
+      const embeddings = new GoogleGenAIEmbeddings({
+        model: "text-embedding-004",
       });
 
       console.log("Generating embeddings and saving to Qdrant...");
@@ -73,8 +72,8 @@ program
     try {
       console.log(`Querying: "${query}"`);
       
-      const embeddings = new OpenAIEmbeddings({
-        model: "text-embedding-3-large",
+      const embeddings = new GoogleGenAIEmbeddings({
+        model: "text-embedding-004",
       });
 
       const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, getVectorStoreConfig());
@@ -91,7 +90,10 @@ program
          return;
       }
 
-      const client = new OpenAI();
+      const model = new ChatGoogleGenAI({
+        modelName: "gemini-1.5-flash",
+        temperature: 0.1
+      });
 
       const systemPrompt = `You are an AI Assistant that helps resolve user queries based strictly on the provided context from indexed documents.
 
@@ -105,23 +107,13 @@ ${searchedChunks.map(c => c.pageContent).join('\n\n')}
 `;
 
       console.log("Generating answer...\n");
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: query
-          }
-        ],
-        temperature: 0.1
-      });
+      const response = await model.invoke([
+        ["system", systemPrompt],
+        ["human", query]
+      ]);
 
       console.log("=== Answer ===");
-      console.log(response.choices[0].message.content);
+      console.log(response.content);
       console.log("==============");
       
       console.log("\nSources:");

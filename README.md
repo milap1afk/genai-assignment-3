@@ -15,7 +15,7 @@ Parameters used:
 
 ## Setup & Local Development
 
-1. Copy `.env.example` to `.env` and configure your `OPENAI_API_KEY`.
+1. Copy `.env.example` to `.env` and configure your `GEMINI_API_KEY`.
 2. Start the Qdrant Vector Database using Docker:
    ```bash
    docker-compose up -d
@@ -55,5 +55,5 @@ node index.js ask "What is the document about?"
 For easy deployment (e.g. Render, Railway):
 1. Push this repository to GitHub.
 2. Link it to Render/Railway as a Web Service.
-3. Ensure `OPENAI_API_KEY` and `QDRANT_URL` (if using Qdrant Cloud) are set in your deployment environment variables.
+3. Ensure `GEMINI_API_KEY` and `QDRANT_URL` (if using Qdrant Cloud) are set in your deployment environment variables.
 4. The deployment service will automatically run `npm start`.
