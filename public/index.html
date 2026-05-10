@@ -45,6 +45,8 @@
     </div>
 
     <script>
+        let currentDocumentText = "";
+
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('uploadBtn');
@@ -63,7 +65,8 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    status.textContent = `Success: ${data.message} (${data.chunks} chunks created)`;
+                    currentDocumentText = data.text;
+                    status.textContent = `Success: Document processed and ready for questions!`;
                 } else {
                     status.textContent = `Error: ${data.error}`;
                     status.style.color = 'red';
@@ -83,6 +86,11 @@
             const query = queryInput.value;
             if (!query) return;
 
+            if (!currentDocumentText) {
+                alert("Please upload a document first!");
+                return;
+            }
+
             addMessage(query, 'user');
             queryInput.value = '';
             document.getElementById('chatLoader').style.display = 'block';
@@ -91,7 +99,7 @@
                 const res = await fetch('/api/ask', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
+                    body: JSON.stringify({ query, documentText: currentDocumentText })
                 });
                 const data = await res.json();
                 

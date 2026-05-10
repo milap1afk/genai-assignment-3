@@ -4,7 +4,7 @@ import multer from "multer";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { GoogleGenAIEmbeddings, ChatGoogleGenAI } from "@langchain/google-genai";
-import { QdrantVectorStore } from "@langchain/qdrant";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import fs from "fs";
 
 const app = express();
@@ -15,14 +15,7 @@ app.use(express.json());
 
 const upload = multer({ dest: '/tmp/' });
 
-const COLLECTION_NAME = "notebook_lm_rag_collection";
-const getVectorStoreConfig = () => ({
-  url: process.env.QDRANT_URL || "http://localhost:6333",
-  collectionName: COLLECTION_NAME,
-  ...(process.env.QDRANT_API_KEY && { apiKey: process.env.QDRANT_API_KEY })
-});
-
-// Endpoint to upload and index document
+// Endpoint to upload and parse document
 app.post("/api/upload", upload.single("document"), async (req, res) => {
     try {
         if (!req.file) {
@@ -32,23 +25,14 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
         console.log(`Uploaded file: ${req.file.path}`);
         const loader = new PDFLoader(req.file.path);
         const docs = await loader.load();
-
-        const textSplitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
-        });
-
-        const chunkedDocs = await textSplitter.splitDocuments(docs);
-        const embeddings = new GoogleGenAIEmbeddings({
-            model: "text-embedding-004",
-        });
-
-        await QdrantVectorStore.fromDocuments(chunkedDocs, embeddings, getVectorStoreConfig());
         
-        // Clean up
+        // Clean up temp file
         fs.unlinkSync(req.file.path);
 
-        res.json({ message: "Document indexed successfully", chunks: chunkedDocs.length });
+        res.json({ 
+            message: "Document loaded successfully", 
+            text: docs.map(d => d.pageContent).join('\n')
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: error.message });
@@ -58,16 +42,24 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 // Endpoint to ask question
 app.post("/api/ask", async (req, res) => {
     try {
-        const { query } = req.body;
-        if (!query) {
-            return res.status(400).json({ error: "Query is required" });
+        const { query, documentText } = req.body;
+        if (!query || !documentText) {
+            return res.status(400).json({ error: "Query and document context are required" });
         }
+
+        // Run full RAG pipeline in memory (perfect for Vercel Serverless)
+        const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+        });
+
+        const chunkedDocs = await textSplitter.createDocuments([documentText]);
 
         const embeddings = new GoogleGenAIEmbeddings({
             model: "text-embedding-004",
         });
 
-        const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, getVectorStoreConfig());
+        const vectorStore = await MemoryVectorStore.fromDocuments(chunkedDocs, embeddings);
         const retriever = vectorStore.asRetriever({ k: 4 });
         const searchedChunks = await retriever.invoke(query);
 
